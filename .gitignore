@@ -4,3 +4,11 @@ dist/
 *.xcodeproj/xcuserdata/
 DerivedData/
 .DS_Store
+
+# Sensitive & local configs
+*.pem
+*.key
+rarreg.key
+local.properties
+*.bak
+.DS_Store
