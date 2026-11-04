@@ -8,12 +8,14 @@ struct SettingsView: View {
         TabView {
             general
                 .tabItem { Label("General", systemImage: "gearshape") }
+            updates
+                .tabItem { Label("Updates", systemImage: "shippingbox.and.arrow.backward") }
             locations
                 .tabItem { Label("Custom Locations", systemImage: "folder.badge.gearshape") }
             permissions
                 .tabItem { Label("Permissions", systemImage: "lock.shield") }
         }
-        .frame(width: 520, height: 400)
+        .frame(width: 560, height: 440)
         .tint(Theme.accent)
     }
 
@@ -25,7 +27,7 @@ struct SettingsView: View {
                     Text("Delete permanently").tag(true)
                 }
                 .pickerStyle(.radioGroup)
-                Toggle("Ask for confirmation before cleaning", isOn: $model.confirmBeforeCleaning)
+                Toggle("Ask for confirmation before cleaning or updating", isOn: $model.confirmBeforeCleaning)
                 Text("Emptying the Trash is always confirmed, whatever this setting says.")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -39,6 +41,33 @@ struct SettingsView: View {
                 LabeledContent("Lifetime space freed") { BytesText(bytes: model.history.lifetimeBytes) }
                 Button("Clear History…", role: .destructive) { model.requestClearHistory() }
                     .disabled(model.history.entries.isEmpty)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var updates: some View {
+        Form {
+            Section("Automation") {
+                Toggle("Check for updates on launch", isOn: $model.checkUpdatesOnLaunch)
+            }
+            Section("Update Sources") {
+                Toggle("Homebrew (Casks & Formulae)", isOn: $model.checkHomebrewUpdates)
+                Toggle("Mac App Store (mas)", isOn: $model.checkMasUpdates)
+                Toggle("macOS System Updates (softwareupdate)", isOn: $model.checkSystemUpdates)
+                Toggle("Global Developer Packages (npm, pip)", isOn: $model.checkDevPackageUpdates)
+                Toggle("Direct Applications (Sparkle Appcasts)", isOn: $model.checkSparkleUpdates)
+            }
+            Section("Exceptions") {
+                if model.ignoredUpdates.isEmpty {
+                    Text("No packages or apps are currently ignored.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    LabeledContent("Ignored updates", value: "\(model.ignoredUpdates.count) item(s)")
+                    Button("Reset All Ignored Updates") {
+                        model.ignoredUpdateIDs.removeAll()
+                    }
+                }
             }
         }
         .formStyle(.grouped)
@@ -77,7 +106,7 @@ struct SettingsView: View {
                 LabeledContent("Full Disk Access") {
                     Button("Open Settings") { SystemSettings.open(.fullDiskAccess) }
                 }
-                Text("Optional. Lets AleTemizCache measure the Trash and reach caches that macOS protects.")
+                Text("Optional. Lets \(Brand.appName) measure the Trash and reach caches that macOS protects.")
                     .font(.caption).foregroundStyle(.secondary)
                 LabeledContent("Automation (Finder)") {
                     Button("Open Settings") { SystemSettings.open(.automation) }

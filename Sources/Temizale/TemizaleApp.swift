@@ -2,25 +2,25 @@ import SwiftUI
 import AppKit
 
 @main
-struct AleTemizCacheApp: App {
+struct TemizaleApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel()
 
     var body: some Scene {
-        Window("AleTemizCache", id: "main") {
+        Window("Temizale", id: "main") {
             RootView()
                 .environmentObject(model)
-                .frame(minWidth: 820, minHeight: 560)
+                .frame(minWidth: 860, minHeight: 580)
         }
-        .defaultSize(width: 1080, height: 720)
+        .defaultSize(width: 1100, height: 740)
         .windowToolbarStyle(.unified)
         .commands {
             CommandGroup(replacing: .appInfo) {
-                Button("About AleTemizCache") { AppDelegate.showAboutPanel() }
+                Button("About Temizale") { AppDelegate.showAboutPanel() }
             }
             CommandGroup(replacing: .newItem) {}
             CommandMenu("Clean") {
-                Button("Rescan") { Task { await model.refreshAll() } }
+                Button("Rescan Caches") { Task { await model.refreshAll() } }
                     .keyboardShortcut("r")
                     .disabled(model.isBusy)
                 Button("Clean Selected…") { model.requestCleanSelected() }
@@ -35,10 +35,19 @@ struct AleTemizCacheApp: App {
                 Button("Deselect All Locations") { model.setSelected(false) }
                     .keyboardShortcut("d", modifiers: [.command, .shift])
             }
+            CommandMenu("Updates") {
+                Button("Check for Updates") { Task { await model.checkForUpdates() } }
+                    .keyboardShortcut("u", modifiers: .command)
+                    .disabled(model.isCheckingUpdates || model.isApplyingUpdates)
+                Button("Update All Packages…") { model.requestUpdateAll() }
+                    .keyboardShortcut("u", modifiers: [.command, .shift])
+                    .disabled(model.availableUpdatesCount == 0 || model.isApplyingUpdates)
+            }
             CommandGroup(after: .sidebar) {
                 Button("Overview") { model.selection = .overview }.keyboardShortcut("1")
-                Button("Trash") { model.selection = .trash }.keyboardShortcut("2")
-                Button("History") { model.selection = .history }.keyboardShortcut("3")
+                Button("Updates") { model.selection = .updates }.keyboardShortcut("2")
+                Button("Trash") { model.selection = .trash }.keyboardShortcut("3")
+                Button("History") { model.selection = .history }.keyboardShortcut("4")
                 Divider()
             }
         }

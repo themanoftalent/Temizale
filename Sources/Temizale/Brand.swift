@@ -2,8 +2,8 @@ import Foundation
 
 /// Product, brand and developer identity shown in the About panel, Settings and sidebar.
 enum Brand {
-    static let appName = "AleTemizCache"
-    static let brand = "AleTemizCache"
+    static let appName = "Temizale"
+    static let brand = "Temizale"
     static let logoText = "Ale"
     static let developer = "Mehmet Akif Cifci"
     static let identity = "TheManOfTalent"
@@ -12,8 +12,8 @@ enum Brand {
     static let repository = URL(string: "https://github.com/themanoftalent/AleTemizCache")!
 
     static var version: String {
-        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
-        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
+        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.2.0"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "4"
         return "\(short) (\(build))"
     }
 }

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Builds AleTemizCache.app into ./dist.
+# Builds Temizale.app into ./dist.
 #   ./scripts/build-app.sh            native architecture
 #   ./scripts/build-app.sh universal  arm64 + x86_64 (needs full Xcode, not only Command Line Tools)
 #   SIGN_IDENTITY="Developer ID Application: ..." ./scripts/build-app.sh universal
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-APP_NAME="AleTemizCache"
+APP_NAME="Temizale"
 DIST="dist"
 APP="$DIST/$APP_NAME.app"
 

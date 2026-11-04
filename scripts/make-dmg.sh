@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Packages dist/AleTemizCache.app into dist/AleTemizCache-<version>.dmg with an Applications shortcut.
+# Packages dist/Temizale.app into dist/Temizale-<version>.dmg with an Applications shortcut.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-APP="dist/AleTemizCache.app"
+APP="dist/Temizale.app"
 [[ -d "$APP" ]] || { echo "Run scripts/build-app.sh first"; exit 1; }
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")"
-DMG="dist/AleTemizCache-$VERSION.dmg"
+DMG="dist/Temizale-$VERSION.dmg"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
@@ -15,7 +15,7 @@ cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 
 rm -f "$DMG"
-hdiutil create -volname "AleTemizCache" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+hdiutil create -volname "Temizale" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 
 if [[ -n "${SIGN_IDENTITY:-}" ]]; then
     codesign --force --sign "$SIGN_IDENTITY" "$DMG"

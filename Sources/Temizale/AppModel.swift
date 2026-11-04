@@ -10,6 +10,7 @@ final class AppModel: ObservableObject {
 
     enum SidebarItem: Hashable {
         case overview
+        case updates
         case category(CacheTarget.Kind)
         case trash
         case history
@@ -26,6 +27,8 @@ final class AppModel: ObservableObject {
         case cleanTarget(CacheTarget)
         case emptyTrash
         case clearHistory
+        case updateAll
+        case updateItem(SoftwareUpdateItem)
 
         var id: String {
             switch self {
@@ -33,6 +36,8 @@ final class AppModel: ObservableObject {
             case .cleanTarget(let t): return "clean-\(t.id)"
             case .emptyTrash: return "emptyTrash"
             case .clearHistory: return "clearHistory"
+            case .updateAll: return "updateAll"
+            case .updateItem(let item): return "updateItem-\(item.id)"
             }
         }
     }
@@ -63,7 +68,7 @@ final class AppModel: ObservableObject {
         var fraction: Double { total == 0 ? 0 : Double(completed) / Double(total) }
     }
 
-    // MARK: Published state
+    // MARK: Published state - Cache & Clean
 
     @Published private(set) var rows: [Row] = []
     @Published private(set) var isScanning = false
@@ -77,6 +82,22 @@ final class AppModel: ObservableObject {
     @Published private(set) var isEmptyingTrash = false
     @Published private(set) var history = CleanHistory()
     @Published private(set) var warnings: [String] = []
+
+    // MARK: Published state - Updates
+
+    @Published private(set) var updateItems: [SoftwareUpdateItem] = []
+    @Published private(set) var isCheckingUpdates = false
+    @Published private(set) var isApplyingUpdates = false
+    @Published private(set) var updatingItemIDs: Set<String> = []
+    @Published private(set) var updatedItemIDs: Set<String> = []
+    @Published private(set) var failedItemErrors: [String: String] = [:]
+    @Published private(set) var lastUpdateCheckDate: Date?
+    @Published private(set) var updateLogs: [String] = []
+    @Published private(set) var updateProgress: (completed: Int, total: Int, currentName: String)?
+    @Published var selectedUpdateIDs: Set<String> = []
+    @Published var showUpdateLogs = false
+
+    // MARK: Navigation and UI
 
     @Published var selection: SidebarItem? = .overview
     @Published var searchText = ""
@@ -97,6 +118,29 @@ final class AppModel: ObservableObject {
         didSet { defaults.set(hideEmptyLocations, forKey: Keys.hideEmpty) }
     }
 
+    // Update settings
+    @Published var checkUpdatesOnLaunch = true {
+        didSet { defaults.set(checkUpdatesOnLaunch, forKey: Keys.checkOnLaunch) }
+    }
+    @Published var checkHomebrewUpdates = true {
+        didSet { defaults.set(checkHomebrewUpdates, forKey: Keys.checkBrew) }
+    }
+    @Published var checkMasUpdates = true {
+        didSet { defaults.set(checkMasUpdates, forKey: Keys.checkMas) }
+    }
+    @Published var checkSystemUpdates = true {
+        didSet { defaults.set(checkSystemUpdates, forKey: Keys.checkSystem) }
+    }
+    @Published var checkDevPackageUpdates = true {
+        didSet { defaults.set(checkDevPackageUpdates, forKey: Keys.checkDev) }
+    }
+    @Published var checkSparkleUpdates = true {
+        didSet { defaults.set(checkSparkleUpdates, forKey: Keys.checkSparkle) }
+    }
+    @Published var ignoredUpdateIDs: Set<String> = [] {
+        didSet { defaults.set(Array(ignoredUpdateIDs), forKey: Keys.ignoredUpdates) }
+    }
+
     // MARK: Private
 
     private enum Keys {
@@ -106,6 +150,13 @@ final class AppModel: ObservableObject {
         static let deselected = "deselectedTargetIDs"
         static let history = "cleanHistory"
         static let sort = "sortOrder"
+        static let checkOnLaunch = "checkUpdatesOnLaunch"
+        static let checkBrew = "checkHomebrewUpdates"
+        static let checkMas = "checkMasUpdates"
+        static let checkSystem = "checkSystemUpdates"
+        static let checkDev = "checkDevPackageUpdates"
+        static let checkSparkle = "checkSparkleUpdates"
+        static let ignoredUpdates = "ignoredUpdateIDs"
     }
 
     private let defaults = UserDefaults.standard
@@ -120,12 +171,27 @@ final class AppModel: ObservableObject {
         hideEmptyLocations = defaults.bool(forKey: Keys.hideEmpty)
         sortOrder = SortOrder(rawValue: defaults.string(forKey: Keys.sort) ?? "") ?? .size
         history = CleanHistory.decode(defaults.data(forKey: Keys.history))
+
+        checkUpdatesOnLaunch = defaults.object(forKey: Keys.checkOnLaunch) as? Bool ?? true
+        checkHomebrewUpdates = defaults.object(forKey: Keys.checkBrew) as? Bool ?? true
+        checkMasUpdates = defaults.object(forKey: Keys.checkMas) as? Bool ?? true
+        checkSystemUpdates = defaults.object(forKey: Keys.checkSystem) as? Bool ?? true
+        checkDevPackageUpdates = defaults.object(forKey: Keys.checkDev) as? Bool ?? true
+        checkSparkleUpdates = defaults.object(forKey: Keys.checkSparkle) as? Bool ?? true
+        ignoredUpdateIDs = Set(defaults.stringArray(forKey: Keys.ignoredUpdates) ?? [])
+
         reloadCatalog()
+
+        if checkUpdatesOnLaunch {
+            Task { [weak self] in
+                await self?.checkForUpdates()
+            }
+        }
     }
 
     // MARK: Derived values
 
-    var isBusy: Bool { isScanning || cleaning != nil || isEmptyingTrash }
+    var isBusy: Bool { isScanning || cleaning != nil || isEmptyingTrash || isApplyingUpdates }
 
     var totalBytes: Int64 { rows.compactMap(\.size).reduce(0, +) }
 
@@ -139,6 +205,18 @@ final class AppModel: ObservableObject {
         CacheTarget.Kind.allCases.filter { kind in rows.contains { $0.target.kind == kind } }
     }
 
+    var availableUpdates: [SoftwareUpdateItem] {
+        updateItems.filter { !ignoredUpdateIDs.contains($0.id) && !updatedItemIDs.contains($0.id) }
+    }
+
+    var availableUpdatesCount: Int {
+        availableUpdates.count
+    }
+
+    var ignoredUpdates: [SoftwareUpdateItem] {
+        updateItems.filter { ignoredUpdateIDs.contains($0.id) }
+    }
+
     func bytes(for kind: CacheTarget.Kind) -> Int64 {
         rows.filter { $0.target.kind == kind }.compactMap(\.size).reduce(0, +)
     }
@@ -148,44 +226,51 @@ final class AppModel: ObservableObject {
     }
 
     var searchResults: [Row] {
-        let query = searchText.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return [] }
-        return sorted(rows.filter {
-            $0.target.title.localizedCaseInsensitiveContains(query)
-                || $0.target.summary.localizedCaseInsensitiveContains(query)
-                || $0.target.kind.title.localizedCaseInsensitiveContains(query)
-                || $0.target.paths.contains { $0.localizedCaseInsensitiveContains(query) }
+        let needle = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !needle.isEmpty else { return [] }
+        return sorted(rows.filter { row in
+            visible(row) && (row.target.title.lowercased().contains(needle)
+                || row.target.summary.lowercased().contains(needle)
+                || row.target.kind.title.lowercased().contains(needle)
+                || row.target.paths.contains { $0.lowercased().contains(needle) })
         })
     }
 
-    var largestRows: [Row] {
-        Array(rows.filter { ($0.size ?? 0) > 0 }.sorted { ($0.size ?? 0) > ($1.size ?? 0) }.prefix(6))
+    func row(_ id: String) -> Row? {
+        rows.first { $0.id == id }
     }
 
-    func row(_ id: String) -> Row? { rows.first { $0.id == id } }
-
     private func visible(_ row: Row) -> Bool {
-        !(hideEmptyLocations && row.size == 0)
+        if hideEmptyLocations, let size = row.size, size == 0 { return false }
+        return true
     }
 
     private func sorted(_ list: [Row]) -> [Row] {
-        switch sortOrder {
-        case .size: return list.sorted { ($0.size ?? -1, $1.target.title) > ($1.size ?? -1, $0.target.title) }
-        case .name: return list.sorted { $0.target.title.localizedStandardCompare($1.target.title) == .orderedAscending }
+        list.sorted { a, b in
+            switch sortOrder {
+            case .size:
+                let sa = a.size ?? -1
+                let sb = b.size ?? -1
+                if sa != sb { return sa > sb }
+                return a.target.title.localizedCaseInsensitiveCompare(b.target.title) == .orderedAscending
+            case .name:
+                return a.target.title.localizedCaseInsensitiveCompare(b.target.title) == .orderedAscending
+            }
         }
     }
 
-    // MARK: Catalog and selection
+    // MARK: Catalog
 
     func reloadCatalog() {
         let result = Catalog.load(home: home)
-        let deselected = Set(defaults.stringArray(forKey: Keys.deselected) ?? [])
-        let previous = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.size) })
-        rows = result.targets.map { Row(target: $0, size: previous[$0.id] ?? nil, isSelected: !deselected.contains($0.id)) }
         warnings = result.warnings
-        if !result.warnings.isEmpty {
-            showToast(.init(style: .warning, title: "Some definitions were skipped",
-                            detail: "\(result.warnings.count) path(s) failed the safety check. See Settings › Custom Locations."))
+        let deselected = Set(defaults.stringArray(forKey: Keys.deselected) ?? [])
+        let previousSizes = Dictionary(uniqueKeysWithValues: rows.compactMap { r in r.size.map { (r.id, $0) } })
+
+        rows = result.targets.map { target in
+            Row(target: target,
+                size: previousSizes[target.id],
+                isSelected: !deselected.contains(target.id))
         }
         Task { await refreshAll() }
     }
@@ -211,7 +296,7 @@ final class AppModel: ObservableObject {
         defaults.set(rows.filter { !$0.isSelected }.map(\.id), forKey: Keys.deselected)
     }
 
-    // MARK: Scanning
+    // MARK: Cache Scanning
 
     func refreshAll() async {
         await scan()
@@ -250,11 +335,150 @@ final class AppModel: ObservableObject {
         }.value
     }
 
-    func refreshDisk() {
+    private func refreshDisk() {
         disk = DiskSpace.forVolume(containing: home)
     }
 
-    // MARK: Cleaning
+    // MARK: Software & Package Updates
+
+    func checkForUpdates() async {
+        guard !isCheckingUpdates, !isApplyingUpdates else { return }
+        isCheckingUpdates = true
+        let options = UpdateCheckOptions(
+            checkBrew: checkHomebrewUpdates,
+            checkMas: checkMasUpdates,
+            checkSystem: checkSystemUpdates,
+            checkSparkle: checkSparkleUpdates,
+            checkDevPackages: checkDevPackageUpdates
+        )
+        let items = await SoftwareUpdateScanner.scan(options: options)
+        self.updateItems = items
+        self.selectedUpdateIDs = Set(items.filter { !self.ignoredUpdateIDs.contains($0.id) }.map(\.id))
+        self.lastUpdateCheckDate = Date()
+        self.isCheckingUpdates = false
+    }
+
+    func requestUpdateAll() {
+        guard availableUpdatesCount > 0, !isApplyingUpdates else { return }
+        if confirmBeforeCleaning {
+            pending = .updateAll
+        } else {
+            perform(.updateAll)
+        }
+    }
+
+    func requestUpdateItem(_ item: SoftwareUpdateItem) {
+        guard !isApplyingUpdates else { return }
+        if confirmBeforeCleaning {
+            pending = .updateItem(item)
+        } else {
+            perform(.updateItem(item))
+        }
+    }
+
+    func toggleIgnoreUpdate(id: String) {
+        if ignoredUpdateIDs.contains(id) {
+            ignoredUpdateIDs.remove(id)
+            selectedUpdateIDs.insert(id)
+        } else {
+            ignoredUpdateIDs.insert(id)
+            selectedUpdateIDs.remove(id)
+        }
+    }
+
+    func toggleSelectUpdate(id: String) {
+        if selectedUpdateIDs.contains(id) {
+            selectedUpdateIDs.remove(id)
+        } else {
+            selectedUpdateIDs.insert(id)
+        }
+    }
+
+    func selectAllUpdates(_ select: Bool) {
+        if select {
+            selectedUpdateIDs = Set(availableUpdates.map(\.id))
+        } else {
+            selectedUpdateIDs.removeAll()
+        }
+    }
+
+    func appendUpdateLog(_ line: String) {
+        updateLogs.append(line)
+        if updateLogs.count > 600 {
+            updateLogs.removeFirst(updateLogs.count - 600)
+        }
+    }
+
+    func clearUpdateLogs() {
+        updateLogs.removeAll()
+    }
+
+    private func performUpdateAll() async {
+        guard !isApplyingUpdates else { return }
+        let itemsToUpdate = updateItems.filter {
+            selectedUpdateIDs.contains($0.id) &&
+            !ignoredUpdateIDs.contains($0.id) &&
+            !updatedItemIDs.contains($0.id)
+        }
+        guard !itemsToUpdate.isEmpty else { return }
+
+        isApplyingUpdates = true
+        showUpdateLogs = true
+        appendUpdateLog("═══════════════════════════════════════════════════════")
+        appendUpdateLog("🚀 Starting batch update for \(itemsToUpdate.count) items...")
+        appendUpdateLog("═══════════════════════════════════════════════════════")
+
+        for (idx, item) in itemsToUpdate.enumerated() {
+            updatingItemIDs.insert(item.id)
+            updateProgress = (idx + 1, itemsToUpdate.count, item.displayName)
+
+            let result = await SoftwareUpdateExecutor.upgrade(item) { [weak self] line in
+                Task { @MainActor [weak self] in
+                    self?.appendUpdateLog(line)
+                }
+            }
+
+            updatingItemIDs.remove(item.id)
+            if result.success {
+                updatedItemIDs.insert(item.id)
+                failedItemErrors.removeValue(forKey: item.id)
+            } else {
+                failedItemErrors[item.id] = result.message
+            }
+        }
+
+        updateProgress = nil
+        isApplyingUpdates = false
+        showToast(Toast(
+            style: .success,
+            title: "Updates completed",
+            detail: "\(updatedItemIDs.count) items upgraded successfully."
+        ))
+    }
+
+    private func performUpdateItem(_ item: SoftwareUpdateItem) async {
+        guard !isApplyingUpdates, !updatingItemIDs.contains(item.id) else { return }
+        updatingItemIDs.insert(item.id)
+        showUpdateLogs = true
+
+        let result = await SoftwareUpdateExecutor.upgrade(item) { [weak self] line in
+            Task { @MainActor [weak self] in
+                self?.appendUpdateLog(line)
+            }
+        }
+
+        updatingItemIDs.remove(item.id)
+        if result.success {
+            updatedItemIDs.insert(item.id)
+            failedItemErrors.removeValue(forKey: item.id)
+            showToast(Toast(style: .success, title: "\(item.displayName) updated successfully"))
+        } else {
+            failedItemErrors[item.id] = result.message
+            showToast(Toast(style: .error, title: "\(item.displayName) update failed", detail: result.message))
+        }
+    }
+
+    // MARK: Cleaning Actions
 
     func requestCleanSelected() {
         guard selectedNonEmptyCount > 0, !isBusy else { return }
@@ -288,6 +512,10 @@ final class AppModel: ObservableObject {
             history.clear()
             persistHistory()
             showToast(.init(style: .info, title: "History cleared"))
+        case .updateAll:
+            Task { await performUpdateAll() }
+        case .updateItem(let item):
+            Task { await performUpdateItem(item) }
         }
     }
 
@@ -305,13 +533,15 @@ final class AppModel: ObservableObject {
             cleaning = CleaningProgress(current: target.title, completed: index, total: targets.count)
             let before = row(target.id)?.size ?? 0
             let report = await Task.detached(priority: .userInitiated) { cleaner.clean(target) }.value
-            let after = await measure(target)
-            if let i = rows.firstIndex(where: { $0.id == target.id }) { rows[i].size = after }
-
-            freed += max(0, before - after)
             removed += report.removedItems
-            problems += report.failures + report.refused
-            if report.removedItems > 0 { touched.append(target.title) }
+            problems.append(contentsOf: report.failures)
+            touched.append(target.title)
+
+            if let idx = rows.firstIndex(where: { $0.id == target.id }) {
+                let after = await measure(target)
+                rows[idx].size = after
+                if before > after { freed += (before - after) }
+            }
         }
         cleaning = CleaningProgress(current: "Done", completed: targets.count, total: targets.count)
 
@@ -322,23 +552,19 @@ final class AppModel: ObservableObject {
         await refreshTrash()
 
         if !problems.isEmpty {
-            NSLog("AleTemizCache: %d item(s) not removed:\n%@", problems.count, problems.joined(separator: "\n"))
-        }
-        let skippedNote = problems.isEmpty ? nil : "\(problems.count) item(s) were in use or protected and stayed. Quit the related apps and try again."
-
-        if removed == 0 && !problems.isEmpty {
-            showToast(.init(style: .error, title: "Nothing could be removed", detail: skippedNote))
-        } else if mode == .trash {
-            var toast = Toast(style: problems.isEmpty ? .success : .warning,
-                              title: "Moved \(ByteText.string(freed)) to the Trash",
-                              detail: [skippedNote ?? "Disk space is released when you empty the Trash."].joined())
-            toast.action = .emptyTrash
-            toast.actionTitle = "Empty Trash…"
-            showToast(toast)
+            let note = "\(problems.count) item(s) could not be removed (in use or protected)."
+            showToast(.init(style: .warning,
+                            title: freed > 0 ? "Freed \(ByteText.string(freed))" : "Cleanup partially failed",
+                            detail: note))
+        } else if freed == 0 {
+            showToast(.init(style: .info, title: "Selected folders are already empty"))
         } else {
-            showToast(.init(style: problems.isEmpty ? .success : .warning,
+            let skippedNote = mode == .trash ? "Items moved to the Trash. Empty it to reclaim disk space." : nil
+            showToast(.init(style: .success,
                             title: "Freed \(ByteText.string(freed))",
-                            detail: skippedNote))
+                            detail: skippedNote,
+                            action: mode == .trash ? .emptyTrash : nil,
+                            actionTitle: mode == .trash ? "Empty Trash…" : nil))
         }
     }
 
@@ -413,7 +639,7 @@ final class AppModel: ObservableObject {
     private func showFinderError(_ error: FinderBridge.Failure) {
         switch error {
         case .notAuthorized:
-            var toast = Toast(style: .error, title: "AleTemizCache may not control Finder",
+            var toast = Toast(style: .error, title: "\(Brand.appName) may not control Finder",
                               detail: "Allow it in System Settings › Privacy & Security › Automation, or grant Full Disk Access.")
             toast.action = .openAutomation
             toast.actionTitle = "Open Settings"

@@ -7,7 +7,7 @@ struct RootView: View {
     var body: some View {
         NavigationSplitView {
             SidebarView()
-                .navigationSplitViewColumnWidth(min: 230, ideal: 250, max: 320)
+                .navigationSplitViewColumnWidth(min: 240, ideal: 260, max: 320)
         } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -34,7 +34,7 @@ struct RootView: View {
             titleVisibility: .visible,
             presenting: model.pending
         ) { action in
-            Button(confirmButton(for: action), role: .destructive) { model.perform(action) }
+            Button(confirmButton(for: action), role: confirmRole(for: action)) { model.perform(action) }
             Button("Cancel", role: .cancel) { model.pending = nil }
         } message: { action in
             Text(confirmMessage(for: action))
@@ -49,6 +49,7 @@ struct RootView: View {
             } else {
                 switch model.selection ?? .overview {
                 case .overview: OverviewView()
+                case .updates: UpdatesView()
                 case .category(let kind): CategoryView(kind: kind)
                 case .trash: TrashView()
                 case .history: HistoryView()
@@ -64,6 +65,7 @@ struct RootView: View {
         if !model.searchText.isEmpty { return "search" }
         switch model.selection ?? .overview {
         case .overview: return "overview"
+        case .updates: return "updates"
         case .category(let kind): return "cat-\(kind.rawValue)"
         case .trash: return "trash"
         case .history: return "history"
@@ -72,7 +74,7 @@ struct RootView: View {
 
     private var showsActionBar: Bool {
         switch model.selection ?? .overview {
-        case .trash, .history: return !model.searchText.isEmpty
+        case .trash, .history, .updates: return !model.searchText.isEmpty
         default: return true
         }
     }
@@ -81,11 +83,14 @@ struct RootView: View {
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             Button {
-                Task { await model.refreshAll() }
+                Task {
+                    await model.refreshAll()
+                    await model.checkForUpdates()
+                }
             } label: {
                 Label("Rescan", systemImage: "arrow.clockwise")
             }
-            .help("Measure all cache folders again (⌘R)")
+            .help("Rescan caches and check for updates (⌘R)")
             .disabled(model.isBusy)
         }
     }
@@ -99,6 +104,17 @@ struct RootView: View {
         case .cleanTarget(let target): return "Clean \(target.title)?"
         case .emptyTrash: return "Empty the Trash?"
         case .clearHistory: return "Clear cleaning history?"
+        case .updateAll: return "Update \(model.availableUpdatesCount) apps & packages?"
+        case .updateItem(let item): return "Update \(item.displayName)?"
+        }
+    }
+
+    private func confirmRole(for action: AppModel.PendingAction) -> ButtonRole? {
+        switch action {
+        case .cleanSelected, .cleanTarget, .emptyTrash, .clearHistory:
+            return .destructive
+        case .updateAll, .updateItem:
+            return nil
         }
     }
 
@@ -108,6 +124,8 @@ struct RootView: View {
             return model.deletePermanently ? "Delete Permanently" : "Move to Trash"
         case .emptyTrash: return "Empty Trash"
         case .clearHistory: return "Clear History"
+        case .updateAll: return "Update All"
+        case .updateItem: return "Update"
         }
     }
 
@@ -127,6 +145,10 @@ struct RootView: View {
             return "Everything in the Trash is permanently deleted, including files you deleted yourself and items in Trash folders on external drives. This cannot be undone."
         case .clearHistory:
             return "This removes the record of past cleanups. No files are affected."
+        case .updateAll:
+            return "This will upgrade all selected applications and packages through their original sources (Homebrew, Mac App Store, macOS system updater, etc.)."
+        case .updateItem(let item):
+            return "Upgrade \(item.displayName) from version \(item.installedVersion) to \(item.latestVersion) using \(item.source.title)."
         }
     }
 }
@@ -140,6 +162,7 @@ struct SidebarView: View {
         List(selection: $model.selection) {
             Section {
                 row(.overview, title: "Overview", symbol: "gauge.with.dots.needle.67percent", color: Theme.accent, bytes: model.totalBytes)
+                updatesRow
             }
             Section("Caches") {
                 ForEach(model.kindsInUse, id: \.self) { kind in
@@ -155,6 +178,29 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .safeAreaInset(edge: .top) { BrandHeader() }
         .safeAreaInset(edge: .bottom) { diskFooter }
+    }
+
+    private var updatesRow: some View {
+        HStack(spacing: 10) {
+            IconBadge(symbol: "shippingbox.and.arrow.backward", color: .teal, size: 22)
+            Text("Updates")
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if model.isCheckingUpdates {
+                ProgressView()
+                    .controlSize(.mini)
+            } else if model.availableUpdatesCount > 0 {
+                Text("\(model.availableUpdatesCount)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.teal)
+                    .clipShape(Capsule())
+            }
+        }
+        .tag(AppModel.SidebarItem.updates)
+        .accessibilityElement(children: .combine)
     }
 
     private func row(_ item: AppModel.SidebarItem, title: String, symbol: String, color: Color, bytes: Int64?) -> some View {
@@ -177,31 +223,31 @@ struct SidebarView: View {
 
     private var diskFooter: some View {
         VStack(alignment: .leading, spacing: 0) {
-        if let disk = model.disk {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Image(systemName: "internaldrive").foregroundStyle(.secondary)
-                    Text("Macintosh HD").font(.caption.weight(.medium))
-                    Spacer()
-                    Text("\(ByteText.string(disk.available)) free")
-                        .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            if let disk = model.disk {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Image(systemName: "internaldrive").foregroundStyle(.secondary)
+                        Text("Macintosh HD").font(.caption.weight(.medium))
+                        Spacer()
+                        Text("\(ByteText.string(disk.available)) free")
+                            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                    }
+                    ProgressView(value: disk.usedFraction)
+                        .tint(disk.usedFraction > 0.9 ? Theme.trash : Theme.accent)
                 }
-                ProgressView(value: disk.usedFraction)
-                    .tint(disk.usedFraction > 0.9 ? Theme.trash : Theme.accent)
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Disk: \(ByteText.string(disk.available)) free of \(ByteText.string(disk.total))")
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Disk: \(ByteText.string(disk.available)) free of \(ByteText.string(disk.total))")
-        }
-        Text(Brand.credit)
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
-            .lineLimit(2)
-            .padding(.horizontal, 12)
-            .padding(.bottom, 10)
-            .padding(.top, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(Brand.credit)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(2)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
+                .padding(.top, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

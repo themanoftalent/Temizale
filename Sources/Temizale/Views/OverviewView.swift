@@ -7,6 +7,9 @@ struct OverviewView: View {
     var body: some View {
         Page(title: "Overview", subtitle: subtitle) {
             hero
+            if model.availableUpdatesCount > 0 {
+                updatesBanner
+            }
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: 16) { tiles }
                 VStack(spacing: 16) { tiles }
@@ -58,11 +61,16 @@ struct OverviewView: View {
                 .opacity(model.selectedNonEmptyCount == 0 || model.isBusy ? 0.55 : 1)
                 .disabled(model.selectedNonEmptyCount == 0 || model.isBusy)
 
-                Button("Rescan") { Task { await model.refreshAll() } }
-                    .buttonStyle(.plain)
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .disabled(model.isBusy)
+                Button("Rescan") {
+                    Task {
+                        await model.refreshAll()
+                        await model.checkForUpdates()
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.white.opacity(0.9))
+                .disabled(model.isBusy)
             }
         }
         .padding(24)
@@ -78,11 +86,48 @@ struct OverviewView: View {
         .accessibilityElement(children: .contain)
     }
 
+    // MARK: Updates Banner
+
+    private var updatesBanner: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(Color.teal.opacity(0.18))
+                    .frame(width: 40, height: 40)
+                Image(systemName: "shippingbox.and.arrow.backward.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.teal)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(model.availableUpdatesCount) Software Updates Available")
+                    .font(.subheadline.weight(.semibold))
+                Text("Updates are available for your installed applications and packages.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Review & Update") {
+                model.selection = .updates
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.teal)
+            .controlSize(.small)
+        }
+        .padding(14)
+        .background(Theme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.teal.opacity(0.35), lineWidth: 1)
+        )
+    }
+
     // MARK: Tiles
 
     @ViewBuilder
     private var tiles: some View {
         diskTile
+        updatesTile
         trashTile
         historyTile
     }
@@ -101,6 +146,35 @@ struct OverviewView: View {
             }
         }
         .card()
+    }
+
+    private var updatesTile: some View {
+        Button {
+            model.selection = .updates
+        } label: {
+            HStack(spacing: 16) {
+                IconBadge(symbol: "shippingbox.fill", color: .teal, size: 48)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Updates").font(.subheadline).foregroundStyle(.secondary)
+                    if model.isCheckingUpdates {
+                        Text("Checking…").font(.system(.title3, design: .rounded).weight(.bold))
+                        Text("Scanning sources").font(.caption).foregroundStyle(.secondary)
+                    } else if model.availableUpdatesCount > 0 {
+                        Text("\(model.availableUpdatesCount) available").font(.system(.title3, design: .rounded).weight(.bold))
+                        Text("Apps & packages").font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("Up to date").font(.system(.title3, design: .rounded).weight(.bold))
+                        Text("All packages fresh").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .card()
+        .accessibilityHint("Opens the Updates section")
     }
 
     private var trashTile: some View {
@@ -168,63 +242,75 @@ struct OverviewView: View {
                         Rectangle().fill(Color.primary.opacity(0.08))
                     }
                 }
-                .clipShape(Capsule())
-                .animation(.easeOut(duration: 0.5), value: model.totalBytes)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .frame(height: 14)
-            .accessibilityHidden(true)
+            .frame(height: 18)
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 180))], spacing: 10) {
                 ForEach(model.kindsInUse, id: \.self) { kind in
-                    let bytes = model.bytes(for: kind)
                     Button {
                         model.selection = .category(kind)
                     } label: {
-                        HStack(spacing: 10) {
-                            Circle().fill(Theme.color(for: kind)).frame(width: 10, height: 10)
-                            Text(kind.title)
-                                .lineLimit(1)
-                                .layoutPriority(1)
-                            Spacer(minLength: 6)
-                            BytesText(bytes: bytes).foregroundStyle(.secondary)
-                            Text(percent(bytes, of: total))
-                                .font(.caption).foregroundStyle(.tertiary)
-                                .frame(width: 36, alignment: .trailing)
-                                .monospacedDigit()
+                        HStack(spacing: 8) {
+                            Circle().fill(Theme.color(for: kind)).frame(width: 8, height: 8)
+                            Text(kind.title).font(.callout)
+                            Spacer()
+                            BytesText(bytes: model.bytes(for: kind))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
                         }
-                        .padding(.vertical, 8)
+                        .padding(.vertical, 6)
                         .padding(.horizontal, 10)
-                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-                        .contentShape(Rectangle())
+                        .background(Theme.cardBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(kind.title), \(ByteText.string(bytes))")
-                    .accessibilityHint("Shows these locations")
                 }
             }
         }
         .card()
     }
 
-    private func percent(_ part: Int64, of total: Int64) -> String {
-        "\(Int((Double(part) / Double(max(1, total)) * 100).rounded()))%"
-    }
+    // MARK: Largest locations
 
-    // MARK: Largest
-
-    @ViewBuilder
     private var largest: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Largest locations")
-            if model.largestRows.isEmpty {
-                Text(model.isScanning ? "Measuring…" : "Every cache location is empty. Nothing to clean.")
+        VStack(alignment: .leading, spacing: 14) {
+            SectionHeader(title: "Largest Caches", subtitle: "Top locations taking up disk space")
+            let top = model.rows
+                .filter { ($0.size ?? 0) > 0 }
+                .sorted { ($0.size ?? 0) > ($1.size ?? 0) }
+                .prefix(6)
+
+            if top.isEmpty {
+                Text(model.isScanning ? "Measuring locations…" : "No caches found")
+                    .font(.callout)
                     .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 24)
             } else {
-                ForEach(model.largestRows) { row in
-                    ItemCard(row: row, compact: true)
+                VStack(spacing: 8) {
+                    ForEach(top) { row in
+                        HStack(spacing: 12) {
+                            IconBadge(symbol: row.target.kind.symbol, color: Theme.color(for: row.target.kind), size: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(row.target.title).font(.callout.weight(.medium))
+                                Text(row.target.summary).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                            Spacer()
+                            BytesText(bytes: row.size)
+                                .font(.callout.monospacedDigit().weight(.semibold))
+                            Toggle("", isOn: Binding(
+                                get: { row.isSelected },
+                                set: { _ in model.toggle(row.id) }
+                            ))
+                            .labelsHidden()
+                            .toggleStyle(.checkbox)
+                        }
+                        .padding(10)
+                        .background(Theme.cardBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
                 }
             }
         }
+        .card()
     }
 }

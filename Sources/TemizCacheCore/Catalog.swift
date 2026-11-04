@@ -207,12 +207,12 @@ public enum Catalog {
     ]
 
     public static func userFileURL(home: URL) -> URL {
-        home.appendingPathComponent("Library/Application Support/AleTemizCache/targets.json")
+        home.appendingPathComponent("Library/Application Support/Temizale/targets.json")
     }
 
-    /// Location used before the AleTemizCache rename. Read only when the new file is absent.
+    /// Location used before the Temizale rename. Read only when the new file is absent.
     public static func legacyUserFileURL(home: URL) -> URL {
-        home.appendingPathComponent("Library/Application Support/TemizCache/targets.json")
+        home.appendingPathComponent("Library/Application Support/AleTemizCache/targets.json")
     }
 
     public struct LoadResult: Sendable {
@@ -234,9 +234,15 @@ public enum Catalog {
         builtIn.forEach(add)
 
         var userURL = userFileURL(home: home)
-        if !fileManager.fileExists(atPath: userURL.path),
-           fileManager.fileExists(atPath: legacyUserFileURL(home: home).path) {
-            userURL = legacyUserFileURL(home: home)
+        if !fileManager.fileExists(atPath: userURL.path) {
+            if fileManager.fileExists(atPath: legacyUserFileURL(home: home).path) {
+                userURL = legacyUserFileURL(home: home)
+            } else {
+                let older = home.appendingPathComponent("Library/Application Support/TemizCache/targets.json")
+                if fileManager.fileExists(atPath: older.path) {
+                    userURL = older
+                }
+            }
         }
         if fileManager.fileExists(atPath: userURL.path) {
             do {

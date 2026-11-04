@@ -5,32 +5,32 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>AleTemizCache</string>
+    <string>Temizale</string>
     <key>CFBundleExecutable</key>
-    <string>AleTemizCache</string>
+    <string>Temizale</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.themanoftalent.TemizCache</string>
+    <string>com.themanoftalent.Temizale</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>AleTemizCache</string>
+    <string>Temizale</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.1.0</string>
+    <string>2.2.0</string>
     <key>CFBundleVersion</key>
-    <string>3</string>
+    <string>4</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>AleTemizCache asks Finder to empty the Trash when you choose Empty Trash.</string>
+    <string>Temizale asks Finder to empty the Trash when you choose Empty Trash.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>AleTemizCache © 2026 Mehmet Akif Cifci | TheManOfTalent. MIT License.</string>
+    <string>Temizale © 2026 Mehmet Akif Cifci | TheManOfTalent. MIT License.</string>
 </dict>
 </plist>

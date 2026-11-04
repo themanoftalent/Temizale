@@ -7,6 +7,10 @@ enum Theme {
     static let trash = Color(red: 0.86, green: 0.30, blue: 0.27)
     static let corner: CGFloat = 14
 
+    static let cardBackground = Color(nsColor: .controlBackgroundColor)
+    static let cardBorder = Color.primary.opacity(0.07)
+    static let canvas = Color(nsColor: .windowBackgroundColor)
+
     static func color(for kind: CacheTarget.Kind) -> Color {
         switch kind {
         case .developer: return Color(red: 0.36, green: 0.39, blue: 0.86)
