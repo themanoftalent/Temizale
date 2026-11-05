@@ -24,7 +24,13 @@ fi
 
 if [[ "${1:-}" == "universal" ]]; then
     swift build -c release --arch arm64 --arch x86_64
-    BIN_DIR=".build/apple/Products/Release"
+    if [[ -d ".build/apple/Products/Release" ]]; then
+        BIN_DIR=".build/apple/Products/Release"
+    elif [[ -d ".build/out/Products/Release" ]]; then
+        BIN_DIR=".build/out/Products/Release"
+    else
+        BIN_DIR="$(find .build -path "*/Products/Release" -type d | head -n 1)"
+    fi
 else
     swift build -c release
     BIN_DIR="$(swift build -c release --show-bin-path)"
