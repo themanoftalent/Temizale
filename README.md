@@ -6,7 +6,7 @@ Developed by Mehmet Akif Cifci | TheManOfTalent
 
 ## Features
 
-### 🚀 App & Package Updates (Like Vorssaint)
+### 🚀 App & Package Updates
 - **Unified Update Center**: Checks the original sources of installed apps and packages.
 - **Homebrew Support**: Automatically discovers outdated Homebrew Casks (GUI apps) and Formulae (CLI tools & libraries).
 - **Mac App Store Integration**: Discovers and upgrades App Store applications via `mas`.
@@ -17,7 +17,7 @@ Developed by Mehmet Akif Cifci | TheManOfTalent
 - **Live Terminal Output Drawer**: Real-time streaming log of upgrade operations with color highlights.
 - **Update Exceptions / Exclusions**: Ignore specific packages or applications with a single click.
 
-### 🗑️ App & Package Uninstaller (Like AppCleaner & Vorssaint)
+### 🗑️ App & Package Uninstaller
 - **Deep Clean Uninstaller**: Discovers and completely removes application bundles plus all scattered leftover files across macOS.
 - **Leftover Detection Across macOS**: Locates hidden leftovers in `Application Support`, `Caches`, `Preferences (.plist)`, `Containers & Sandboxes`, `Saved Application State`, `HTTPStorages`, `WebKit`, `Logs & Diagnostics`, and `Launch Agents`.
 - **Drag & Drop Support**: Drag any `.app` bundle from Finder directly onto the window to immediately inspect and clean its leftovers.
