@@ -9,6 +9,43 @@ public enum SoftwareUpdateExecutor {
         public let message: String
     }
 
+    /// Returns the exact shell command to upgrade an item.
+    public static func commandString(for item: SoftwareUpdateItem) -> String {
+        switch item.source {
+        case .brewCask:
+            return "brew upgrade --cask \(item.rawIdentifier)"
+        case .brewFormula:
+            return "brew upgrade \(item.rawIdentifier)"
+        case .mas:
+            return "mas upgrade \(item.rawIdentifier)"
+        case .system:
+            return "sudo softwareupdate --install \(item.rawIdentifier)"
+        case .npm:
+            return "npm install -g \(item.rawIdentifier)@latest"
+        case .pip:
+            return "pip3 install --upgrade --user --break-system-packages \(item.rawIdentifier)"
+        case .sparkle:
+            return item.releaseNotesURL?.absoluteString ?? "open \"\(item.appBundlePath ?? "")\""
+        }
+    }
+
+    /// Opens macOS Terminal and executes the command interactively.
+    public static func runInTerminal(command: String) {
+        let escaped = command
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let script = """
+        tell application "Terminal"
+            activate
+            do script "\(escaped)"
+        end tell
+        """
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+        }
+    }
+
     /// Upgrades a single update item.
     public static func upgrade(
         _ item: SoftwareUpdateItem,
@@ -24,10 +61,24 @@ public enum SoftwareUpdateExecutor {
                 return UpdateResult(success: false, message: msg)
             }
             onOutput("$ brew upgrade --cask \(item.rawIdentifier)")
-            let status = await CommandRunner.stream(brew, arguments: ["upgrade", "--cask", item.rawIdentifier], onOutput: onOutput)
+            var status = await CommandRunner.stream(brew, arguments: ["upgrade", "--cask", item.rawIdentifier], onOutput: onOutput)
+
+            // If cask upgrade fails (e.g. missing uninstall script from an earlier broken cask version),
+            // attempt reinstall fallback which skips missing uninstallers.
+            if status != 0 {
+                onOutput("⚠️ Cask upgrade returned code \(status). Attempting reinstall fallback...")
+                onOutput("$ brew reinstall --cask \(item.rawIdentifier)")
+                status = await CommandRunner.stream(brew, arguments: ["reinstall", "--cask", item.rawIdentifier], onOutput: onOutput)
+            }
+
             let success = status == 0
-            onOutput(success ? "✅ Successfully updated \(item.displayName)" : "❌ Update failed with exit code \(status)")
-            return UpdateResult(success: success, message: success ? "Updated" : "Failed (exit code \(status))")
+            if success {
+                onOutput("✅ Successfully updated \(item.displayName)")
+                return UpdateResult(success: true, message: "Updated")
+            } else {
+                onOutput("❌ Update failed with exit code \(status). If this package requires administrator (sudo) privileges, please use 'Update in Terminal'.")
+                return UpdateResult(success: false, message: "Requires sudo or interactive shell (try 'Update in Terminal')")
+            }
 
         case .brewFormula:
             guard let brew = CommandRunner.which("brew") else {
@@ -83,8 +134,14 @@ public enum SoftwareUpdateExecutor {
                 onOutput("❌ \(msg)")
                 return UpdateResult(success: false, message: msg)
             }
-            onOutput("$ pip3 install --upgrade \(item.rawIdentifier)")
-            let status = await CommandRunner.stream(pip, arguments: ["install", "--upgrade", item.rawIdentifier], onOutput: onOutput)
+            // Use --user and --break-system-packages to comply with PEP 668 on macOS / Homebrew Python
+            onOutput("$ pip3 install --upgrade --user --break-system-packages \(item.rawIdentifier)")
+            var status = await CommandRunner.stream(pip, arguments: ["install", "--upgrade", "--user", "--break-system-packages", item.rawIdentifier], onOutput: onOutput)
+            if status != 0 {
+                onOutput("⚠️ User install returned \(status). Attempting without --user...")
+                onOutput("$ pip3 install --upgrade --break-system-packages \(item.rawIdentifier)")
+                status = await CommandRunner.stream(pip, arguments: ["install", "--upgrade", "--break-system-packages", item.rawIdentifier], onOutput: onOutput)
+            }
             let success = status == 0
             onOutput(success ? "✅ Successfully updated \(item.displayName)" : "❌ Update failed with exit code \(status)")
             return UpdateResult(success: success, message: success ? "Updated" : "Failed (exit code \(status))")

@@ -413,6 +413,19 @@ final class AppModel: ObservableObject {
         updateLogs.removeAll()
     }
 
+    func runInTerminal(for item: SoftwareUpdateItem) {
+        let cmd = SoftwareUpdateExecutor.commandString(for: item)
+        SoftwareUpdateExecutor.runInTerminal(command: cmd)
+        showToast(Toast(style: .info, title: "Launched command in Terminal", detail: cmd))
+    }
+
+    func copyCommand(for item: SoftwareUpdateItem) {
+        let cmd = SoftwareUpdateExecutor.commandString(for: item)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(cmd, forType: .string)
+        showToast(Toast(style: .info, title: "Copied update command"))
+    }
+
     private func performUpdateAll() async {
         guard !isApplyingUpdates else { return }
         let itemsToUpdate = updateItems.filter {

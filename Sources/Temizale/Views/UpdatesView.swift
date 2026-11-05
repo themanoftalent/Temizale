@@ -401,14 +401,28 @@ struct UpdatesView: View {
                         .foregroundStyle(.green)
                 }
             } else if let error {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                    Text("Failed")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.red)
+                HStack(spacing: 8) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        Text("Failed")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.red)
+                    }
+                    .help(error)
+
+                    Button {
+                        model.runInTerminal(for: item)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "terminal")
+                            Text("In Terminal…")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Open and run this update in Terminal for administrator (sudo) access or interactive confirmation.")
                 }
-                .help(error)
             } else {
                 Button("Update") {
                     model.requestUpdateItem(item)
@@ -419,16 +433,45 @@ struct UpdatesView: View {
             }
 
             Menu {
-                Button("Ignore updates for this item") {
-                    model.toggleIgnoreUpdate(id: item.id)
+                Button {
+                    model.requestUpdateItem(item)
+                } label: {
+                    Label("Update", systemImage: "arrow.up.circle")
                 }
-                Button("Copy name") {
+                .disabled(model.isApplyingUpdates)
+
+                Button {
+                    model.runInTerminal(for: item)
+                } label: {
+                    Label("Update in Terminal…", systemImage: "terminal")
+                }
+
+                Button {
+                    model.copyCommand(for: item)
+                } label: {
+                    Label("Copy Update Command", systemImage: "doc.on.doc")
+                }
+
+                Divider()
+
+                Button {
+                    model.toggleIgnoreUpdate(id: item.id)
+                } label: {
+                    Label("Ignore updates for this item", systemImage: "bell.slash")
+                }
+
+                Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(item.name, forType: .string)
+                } label: {
+                    Label("Copy Name", systemImage: "doc.on.clipboard")
                 }
+
                 if let path = item.appBundlePath {
-                    Button("Show in Finder") {
+                    Button {
                         NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
+                    } label: {
+                        Label("Show in Finder", systemImage: "folder")
                     }
                 }
             } label: {
