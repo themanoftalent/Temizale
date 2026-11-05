@@ -29,6 +29,14 @@ public enum AppUninstallerExecutor {
             let url = item.url
             guard fileManager.fileExists(atPath: url.path) else { continue }
 
+            // Guard appearance: Never delete icon/appearance files, and never delete non-bundle folders with custom styling
+            if FolderAppearancePolicy.isFolderColorOrIconFile(url) {
+                continue
+            }
+            if item.category != .bundle && FolderAppearancePolicy.hasCustomColorOrIcon(url, fileManager: fileManager) {
+                continue
+            }
+
             do {
                 if mode == .trash {
                     try fileManager.trashItem(at: url, resultingItemURL: nil)

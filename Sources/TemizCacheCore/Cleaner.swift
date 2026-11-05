@@ -41,24 +41,35 @@ public struct Cleaner: Sendable {
             var isDir: ObjCBool = false
             guard fileManager.fileExists(atPath: folder.path, isDirectory: &isDir), isDir.boolValue else { continue }
 
-            let children: [URL]
-            do {
-                children = try fileManager.contentsOfDirectory(
-                    at: folder,
-                    includingPropertiesForKeys: nil,
-                    options: []
-                )
-            } catch {
-                report.failures.append("\(folder.path): \(error.localizedDescription)")
-                continue
-            }
-
-            for child in children {
+            FolderAppearancePolicy.preserveAppearance(of: folder) {
+                let children: [URL]
                 do {
-                    try remove(child, fileManager: fileManager)
-                    report.removedItems += 1
+                    children = try fileManager.contentsOfDirectory(
+                        at: folder,
+                        includingPropertiesForKeys: nil,
+                        options: []
+                    )
                 } catch {
-                    report.failures.append("\(child.path): \(error.localizedDescription)")
+                    report.failures.append("\(folder.path): \(error.localizedDescription)")
+                    return
+                }
+
+                for child in children {
+                    // Never remove folder color, tag, or custom icon files (e.g. Icon\r, .DS_Store)
+                    if FolderAppearancePolicy.isFolderColorOrIconFile(child) {
+                        continue
+                    }
+                    // Never remove subfolders that have custom color or custom icons
+                    if FolderAppearancePolicy.hasCustomColorOrIcon(child, fileManager: fileManager) {
+                        continue
+                    }
+
+                    do {
+                        try remove(child, fileManager: fileManager)
+                        report.removedItems += 1
+                    } catch {
+                        report.failures.append("\(child.path): \(error.localizedDescription)")
+                    }
                 }
             }
         }

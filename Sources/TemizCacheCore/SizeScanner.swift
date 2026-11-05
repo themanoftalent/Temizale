@@ -21,6 +21,7 @@ public enum SizeScanner {
 
         var total: Int64 = 0
         for case let item as URL in enumerator {
+            if FolderAppearancePolicy.isFolderColorOrIconFile(item) { continue }
             guard let values = try? item.resourceValues(forKeys: Set(keys)) else { continue }
             if values.isSymbolicLink == true { continue }
             guard values.isRegularFile == true else { continue }

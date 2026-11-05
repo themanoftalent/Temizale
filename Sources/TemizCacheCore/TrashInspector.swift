@@ -36,8 +36,8 @@ public enum TrashInspector {
         } catch {
             return .unreadable
         }
-        // Finder keeps a hidden .DS_Store in the Trash; it is not a user item.
-        let items = children.filter { $0.lastPathComponent != ".DS_Store" }
+        // Appearance and icon files (e.g. .DS_Store, Icon\r) are preserved and not counted as user items.
+        let items = children.filter { !FolderAppearancePolicy.isFolderColorOrIconFile($0) }
         let bytes = items.reduce(Int64(0)) { $0 + SizeScanner.allocatedSize(of: $1, fileManager: fileManager) }
         return Status(bytes: bytes, itemCount: items.count, readable: true)
     }
@@ -61,12 +61,17 @@ public enum TrashInspector {
             report.failures.append("\(url.path): \(error.localizedDescription)")
             return report
         }
-        for child in children {
-            do {
-                try fileManager.removeItem(at: child)
-                if child.lastPathComponent != ".DS_Store" { report.removedItems += 1 }
-            } catch {
-                report.failures.append("\(child.lastPathComponent): \(error.localizedDescription)")
+        FolderAppearancePolicy.preserveAppearance(of: url) {
+            for child in children {
+                if FolderAppearancePolicy.isFolderColorOrIconFile(child) {
+                    continue
+                }
+                do {
+                    try fileManager.removeItem(at: child)
+                    report.removedItems += 1
+                } catch {
+                    report.failures.append("\(child.lastPathComponent): \(error.localizedDescription)")
+                }
             }
         }
         return report

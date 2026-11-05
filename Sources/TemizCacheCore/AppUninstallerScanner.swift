@@ -195,6 +195,16 @@ public enum AppUninstallerScanner {
         let path = url.path
         let homePath = home.path
 
+        // Disallow deleting folder color / icon files directly
+        if FolderAppearancePolicy.isFolderColorOrIconFile(url) {
+            return false
+        }
+
+        // Disallow deleting folders that have custom colors or icons (unless it is an .app bundle)
+        if url.pathExtension != "app" && FolderAppearancePolicy.hasCustomColorOrIcon(url, fileManager: FileManager.default) {
+            return false
+        }
+
         // Disallow deleting top-level directories
         let forbidden = [
             "/",
