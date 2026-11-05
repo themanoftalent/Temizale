@@ -50,6 +50,7 @@ struct RootView: View {
                 switch model.selection ?? .overview {
                 case .overview: OverviewView()
                 case .updates: UpdatesView()
+                case .uninstaller: UninstallerView()
                 case .category(let kind): CategoryView(kind: kind)
                 case .trash: TrashView()
                 case .history: HistoryView()
@@ -66,6 +67,7 @@ struct RootView: View {
         switch model.selection ?? .overview {
         case .overview: return "overview"
         case .updates: return "updates"
+        case .uninstaller: return "uninstaller"
         case .category(let kind): return "cat-\(kind.rawValue)"
         case .trash: return "trash"
         case .history: return "history"
@@ -74,7 +76,7 @@ struct RootView: View {
 
     private var showsActionBar: Bool {
         switch model.selection ?? .overview {
-        case .trash, .history, .updates: return !model.searchText.isEmpty
+        case .trash, .history, .updates, .uninstaller: return !model.searchText.isEmpty
         default: return true
         }
     }
@@ -106,12 +108,14 @@ struct RootView: View {
         case .clearHistory: return "Clear cleaning history?"
         case .updateAll: return "Update \(model.availableUpdatesCount) apps & packages?"
         case .updateItem(let item): return "Update \(item.displayName)?"
+        case .uninstallApp(let app): return "Uninstall \(app.displayName)?"
+        case .uninstallBrewPackage(let pkg, let zap): return zap ? "Zap \(pkg.name)?" : "Uninstall \(pkg.name)?"
         }
     }
 
     private func confirmRole(for action: AppModel.PendingAction) -> ButtonRole? {
         switch action {
-        case .cleanSelected, .cleanTarget, .emptyTrash, .clearHistory:
+        case .cleanSelected, .cleanTarget, .emptyTrash, .clearHistory, .uninstallApp, .uninstallBrewPackage:
             return .destructive
         case .updateAll, .updateItem:
             return nil
@@ -126,6 +130,8 @@ struct RootView: View {
         case .clearHistory: return "Clear History"
         case .updateAll: return "Update All"
         case .updateItem: return "Update"
+        case .uninstallApp: return "Uninstall App"
+        case .uninstallBrewPackage(_, let zap): return zap ? "Zap Package" : "Uninstall"
         }
     }
 
@@ -149,6 +155,12 @@ struct RootView: View {
             return "This will upgrade all selected applications and packages through their original sources (Homebrew, Mac App Store, macOS system updater, etc.)."
         case .updateItem(let item):
             return "Upgrade \(item.displayName) from version \(item.installedVersion) to \(item.latestVersion) using \(item.source.title)."
+        case .uninstallApp(let app):
+            return "This removes \(ByteText.string(app.selectedBytes)) across \(app.selectedCount) file(s) (app bundle and all discovered leftover caches, containers, preferences, and support data).\n\n\(destination)"
+        case .uninstallBrewPackage(let pkg, let zap):
+            return zap
+                ? "This will completely uninstall \(pkg.name) and purge all of its configuration and user data."
+                : "This will run 'brew uninstall \(pkg.name)'."
         }
     }
 }
@@ -163,6 +175,7 @@ struct SidebarView: View {
             Section {
                 row(.overview, title: "Overview", symbol: "gauge.with.dots.needle.67percent", color: Theme.accent, bytes: model.totalBytes)
                 updatesRow
+                uninstallerRow
             }
             Section("Caches") {
                 ForEach(model.kindsInUse, id: \.self) { kind in
@@ -200,6 +213,21 @@ struct SidebarView: View {
             }
         }
         .tag(AppModel.SidebarItem.updates)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var uninstallerRow: some View {
+        HStack(spacing: 10) {
+            IconBadge(symbol: "trash.circle.fill", color: .red, size: 22)
+            Text("Uninstaller")
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if model.isScanningApps {
+                ProgressView()
+                    .controlSize(.mini)
+            }
+        }
+        .tag(AppModel.SidebarItem.uninstaller)
         .accessibilityElement(children: .combine)
     }
 

@@ -46,8 +46,9 @@ struct TemizaleApp: App {
             CommandGroup(after: .sidebar) {
                 Button("Overview") { model.selection = .overview }.keyboardShortcut("1")
                 Button("Updates") { model.selection = .updates }.keyboardShortcut("2")
-                Button("Trash") { model.selection = .trash }.keyboardShortcut("3")
-                Button("History") { model.selection = .history }.keyboardShortcut("4")
+                Button("Uninstaller") { model.selection = .uninstaller }.keyboardShortcut("3")
+                Button("Trash") { model.selection = .trash }.keyboardShortcut("4")
+                Button("History") { model.selection = .history }.keyboardShortcut("5")
                 Divider()
             }
         }

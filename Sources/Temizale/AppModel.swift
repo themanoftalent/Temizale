@@ -11,6 +11,7 @@ final class AppModel: ObservableObject {
     enum SidebarItem: Hashable {
         case overview
         case updates
+        case uninstaller
         case category(CacheTarget.Kind)
         case trash
         case history
@@ -29,6 +30,8 @@ final class AppModel: ObservableObject {
         case clearHistory
         case updateAll
         case updateItem(SoftwareUpdateItem)
+        case uninstallApp(InstalledApp)
+        case uninstallBrewPackage(InstalledBrewPackage, zap: Bool)
 
         var id: String {
             switch self {
@@ -38,6 +41,8 @@ final class AppModel: ObservableObject {
             case .clearHistory: return "clearHistory"
             case .updateAll: return "updateAll"
             case .updateItem(let item): return "updateItem-\(item.id)"
+            case .uninstallApp(let app): return "uninstallApp-\(app.id)"
+            case .uninstallBrewPackage(let pkg, let zap): return "uninstallBrew-\(pkg.id)-\(zap)"
             }
         }
     }
@@ -96,6 +101,16 @@ final class AppModel: ObservableObject {
     @Published private(set) var updateProgress: (completed: Int, total: Int, currentName: String)?
     @Published var selectedUpdateIDs: Set<String> = []
     @Published var showUpdateLogs = false
+
+    // MARK: Published state - Uninstaller
+
+    @Published private(set) var installedApps: [InstalledApp] = []
+    @Published var selectedApp: InstalledApp?
+    @Published private(set) var isScanningApps = false
+    @Published private(set) var isInspectingApp = false
+    @Published private(set) var isUninstalling = false
+    @Published private(set) var installedBrewPackages: [InstalledBrewPackage] = []
+    @Published private(set) var isScanningBrewPackages = false
 
     // MARK: Navigation and UI
 
@@ -191,7 +206,7 @@ final class AppModel: ObservableObject {
 
     // MARK: Derived values
 
-    var isBusy: Bool { isScanning || cleaning != nil || isEmptyingTrash || isApplyingUpdates }
+    var isBusy: Bool { isScanning || cleaning != nil || isEmptyingTrash || isApplyingUpdates || isUninstalling }
 
     var totalBytes: Int64 { rows.compactMap(\.size).reduce(0, +) }
 
@@ -529,6 +544,122 @@ final class AppModel: ObservableObject {
             Task { await performUpdateAll() }
         case .updateItem(let item):
             Task { await performUpdateItem(item) }
+        case .uninstallApp(let app):
+            Task { await performUninstallApp(app) }
+        case .uninstallBrewPackage(let pkg, let zap):
+            Task { await performUninstallBrewPackage(pkg, zap: zap) }
+        }
+    }
+
+    // MARK: - App & Package Uninstaller
+
+    func scanInstalledApps() async {
+        guard !isScanningApps else { return }
+        isScanningApps = true
+        let apps = await AppUninstallerScanner.scanInstalledApplications(home: home)
+        self.installedApps = apps
+        isScanningApps = false
+        if selectedApp == nil, let first = apps.first {
+            await inspectApp(first)
+        }
+    }
+
+    func inspectApp(_ app: InstalledApp) async {
+        guard !isInspectingApp else { return }
+        isInspectingApp = true
+        var appWithLeftovers = app
+        let leftovers = await AppUninstallerScanner.discoverLeftovers(for: app, home: home)
+        appWithLeftovers.leftovers = leftovers
+        self.selectedApp = appWithLeftovers
+        if let idx = self.installedApps.firstIndex(where: { $0.id == app.id }) {
+            self.installedApps[idx] = appWithLeftovers
+        }
+        isInspectingApp = false
+    }
+
+    func inspectAppURL(_ url: URL) async {
+        if let basic = AppUninstallerScanner.parseBasicApp(at: url) {
+            if !installedApps.contains(where: { $0.id == basic.id }) {
+                installedApps.insert(basic, at: 0)
+            }
+            await inspectApp(basic)
+        }
+    }
+
+    func toggleLeftover(id: String) {
+        guard var app = selectedApp else { return }
+        if let idx = app.leftovers.firstIndex(where: { $0.id == id }) {
+            app.leftovers[idx].isSelected.toggle()
+            self.selectedApp = app
+        }
+    }
+
+    func selectAllLeftovers(_ select: Bool) {
+        guard var app = selectedApp else { return }
+        for i in app.leftovers.indices {
+            app.leftovers[i].isSelected = select
+        }
+        self.selectedApp = app
+    }
+
+    func requestUninstallApp() {
+        guard let app = selectedApp, app.selectedCount > 0, !isUninstalling else { return }
+        if confirmBeforeCleaning {
+            pending = .uninstallApp(app)
+        } else {
+            perform(.uninstallApp(app))
+        }
+    }
+
+    func performUninstallApp(_ app: InstalledApp) async {
+        guard !isUninstalling else { return }
+        isUninstalling = true
+        let mode: Cleaner.Mode = deletePermanently ? .delete : .trash
+        let result = await AppUninstallerExecutor.uninstall(app: app, items: app.leftovers, mode: mode)
+        isUninstalling = false
+
+        if result.removedCount > 0 {
+            installedApps.removeAll { $0.id == app.id }
+            selectedApp = nil
+            history.record(.init(bytes: result.freedBytes, items: result.removedCount, kind: .caches, targets: ["Uninstalled \(app.displayName)"]))
+            persistHistory()
+            refreshDisk()
+            await refreshTrash()
+
+            let msg = "Uninstalled \(app.displayName) and \(result.removedCount) item(s), freed \(ByteText.string(result.freedBytes))"
+            showToast(Toast(style: .success, title: msg))
+        } else if !result.failedPaths.isEmpty {
+            showToast(Toast(style: .error, title: "Failed to uninstall \(app.displayName)", detail: result.failedPaths.first))
+        }
+    }
+
+    func scanBrewPackages() async {
+        guard !isScanningBrewPackages else { return }
+        isScanningBrewPackages = true
+        let list = await HomebrewPackageManager.listInstalled()
+        self.installedBrewPackages = list
+        isScanningBrewPackages = false
+    }
+
+    func uninstallBrewPackage(_ pkg: InstalledBrewPackage, zap: Bool) {
+        if confirmBeforeCleaning {
+            pending = .uninstallBrewPackage(pkg, zap: zap)
+        } else {
+            perform(.uninstallBrewPackage(pkg, zap: zap))
+        }
+    }
+
+    func performUninstallBrewPackage(_ pkg: InstalledBrewPackage, zap: Bool) async {
+        guard !isUninstalling else { return }
+        isUninstalling = true
+        let res = await HomebrewPackageManager.uninstall(pkg, zap: zap)
+        isUninstalling = false
+
+        if res.exitCode == 0 {
+            installedBrewPackages.removeAll { $0.id == pkg.id }
+            showToast(Toast(style: .success, title: "Uninstalled \(pkg.name) successfully"))
+        } else {
+            showToast(Toast(style: .error, title: "Failed to uninstall \(pkg.name)", detail: res.stderr))
         }
     }
 

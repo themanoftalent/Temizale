@@ -128,6 +128,7 @@ struct OverviewView: View {
     private var tiles: some View {
         diskTile
         updatesTile
+        uninstallerTile
         trashTile
         historyTile
     }
@@ -175,6 +176,28 @@ struct OverviewView: View {
         .buttonStyle(.plain)
         .card()
         .accessibilityHint("Opens the Updates section")
+    }
+
+    private var uninstallerTile: some View {
+        Button {
+            model.selection = .uninstaller
+        } label: {
+            HStack(spacing: 16) {
+                IconBadge(symbol: "trash.circle.fill", color: .red, size: 48)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Uninstaller").font(.subheadline).foregroundStyle(.secondary)
+                    Text(model.installedApps.isEmpty ? "Scan apps" : "\(model.installedApps.count) apps")
+                        .font(.system(.title3, design: .rounded).weight(.bold))
+                    Text("Deep remove & leftovers").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .card()
+        .accessibilityHint("Opens the Uninstaller section")
     }
 
     private var trashTile: some View {

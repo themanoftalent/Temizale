@@ -17,6 +17,14 @@ Developed by Mehmet Akif Cifci | TheManOfTalent
 - **Live Terminal Output Drawer**: Real-time streaming log of upgrade operations with color highlights.
 - **Update Exceptions / Exclusions**: Ignore specific packages or applications with a single click.
 
+### 🗑️ App & Package Uninstaller (Like AppCleaner & Vorssaint)
+- **Deep Clean Uninstaller**: Discovers and completely removes application bundles plus all scattered leftover files across macOS.
+- **Leftover Detection Across macOS**: Locates hidden leftovers in `Application Support`, `Caches`, `Preferences (.plist)`, `Containers & Sandboxes`, `Saved Application State`, `HTTPStorages`, `WebKit`, `Logs & Diagnostics`, and `Launch Agents`.
+- **Drag & Drop Support**: Drag any `.app` bundle from Finder directly onto the window to immediately inspect and clean its leftovers.
+- **App Picker**: Browse installed applications with search, version, and disk size.
+- **Homebrew Cask & Formula Management**: Lists installed Homebrew packages with quick 1-click `Uninstall` and `Zap` (to purge all user data and settings).
+- **Safe & Non-Destructive**: Refuses system applications and critical system roots. Moves items to Trash by default so you can restore them if needed.
+
 ### 🧹 Cache Cleaning & Storage Reclaim
 - **Reclaimable Space Dashboard**: Live dashboard with disk space, reclaimable cache size, Trash status, and lifetime space freed.
 - **Category Navigation & Search**: Browse by category, search across all locations, and sort by size or name.
