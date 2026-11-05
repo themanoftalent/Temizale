@@ -80,4 +80,4 @@ scripts/make-icon.swift   Renders the Ale logo app icon
 - Product: Temizale (brand wordmark: Ale)
 - Developed by: Mehmet Akif Cifci
 - Developer identity: TheManOfTalent
-- Repository: [github.com/themanoftalent/AleTemizCache](https://github.com/themanoftalent/AleTemizCache)
+- Repository: [github.com/themanoftalent/Temizale](https://github.com/themanoftalent/Temizale)

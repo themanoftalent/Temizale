@@ -120,7 +120,7 @@ struct SettingsView: View {
                 LabeledContent("Brand", value: Brand.brand)
                 LabeledContent("Developer identity", value: Brand.identity)
                 LabeledContent("Locations tracked", value: "\(model.rows.count)")
-                Link("github.com/themanoftalent/AleTemizCache", destination: Brand.repository)
+                Link("github.com/themanoftalent/Temizale", destination: Brand.repository)
                 Text(Brand.credit)
                     .font(.caption).foregroundStyle(.secondary)
             }

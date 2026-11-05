@@ -5,7 +5,7 @@ struct TrashView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        Page(title: "Trash", subtitle: "Files you deleted, plus caches AleTemizCache moved here") {
+        Page(title: "Trash", subtitle: "Files you deleted, plus caches Temizale moved here") {
             summaryCard
             if model.trash?.readable == false { accessCard }
             infoCard
@@ -78,7 +78,7 @@ struct TrashView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Measuring the Trash needs Full Disk Access", systemImage: "lock.shield")
                 .font(.headline)
-            Text("Emptying still works without it: AleTemizCache asks Finder to empty the Trash, and macOS asks you once to allow that. To see the size here, add AleTemizCache under System Settings › Privacy & Security › Full Disk Access, then click Refresh.")
+            Text("Emptying still works without it: Temizale asks Finder to empty the Trash, and macOS asks you once to allow that. To see the size here, add Temizale under System Settings › Privacy & Security › Full Disk Access, then click Refresh.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
@@ -101,7 +101,7 @@ struct TrashView: View {
             SectionHeader(title: "Good to know")
             bullet("arrow.uturn.backward", "Caches cleaned in “Move to Trash” mode land here, so you can restore them until you empty the Trash.")
             bullet("externaldrive", "Emptying also clears Trash folders on connected external drives, as Finder does.")
-            bullet("exclamationmark.triangle", "Emptying is permanent. AleTemizCache always asks before it empties.")
+            bullet("exclamationmark.triangle", "Emptying is permanent. Temizale always asks before it empties.")
         }
         .card()
     }

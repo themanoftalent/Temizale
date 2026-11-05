@@ -9,7 +9,7 @@ enum Brand {
     static let identity = "TheManOfTalent"
     static let credit = "Developed by Mehmet Akif Cifci | TheManOfTalent"
     static let github = URL(string: "https://github.com/themanoftalent")!
-    static let repository = URL(string: "https://github.com/themanoftalent/AleTemizCache")!
+    static let repository = URL(string: "https://github.com/themanoftalent/Temizale")!
 
     static var version: String {
         let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.2.0"
